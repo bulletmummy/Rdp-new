@@ -1,94 +1,77 @@
 version: 1.0.{build}
 
-image: Visual Studio 2022
+# Switch the operating system image to macOS
+image: macOS
+
 build: off
 
 environment:
-  RDP_USER: bullet
-  # Fixed: Changed password to meet Windows Server complexity requirements
-  RDP_PASS: "BulletSecure2026!"
+  # VNC requires a 6-to-8 character password
+  VNC_PASS: "Bul2026!"
 
 init:
-  - ps: |
-      Write-Host "Configuring Windows RDP Firewall & Registry Settings..."
-      Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
-      Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
-      Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "SecurityLayer" -Value 0 -Force
-
-      netsh advfirewall firewall delete rule name="RDP-ngrok"
-      netsh advfirewall firewall add rule name="RDP-ngrok" dir=in action=allow protocol=TCP localport=3389
-      Restart-Service -Name TermService -Force
-
-  - ps: |
-      Write-Host "Creating Admin User Account..."
-      $securePass = ConvertTo-SecureString $env:RDP_PASS -AsPlainText -Force
-      if (-not (Get-LocalUser -Name $env:RDP_USER -ErrorAction SilentlyContinue)) {
-          New-LocalUser -Name $env:RDP_USER -Password $securePass -AccountNeverExpires -Description "Secure RDP User Account"
-      } else {
-          $user = Get-LocalUser -Name $env:RDP_USER
-          $user | Set-LocalUser -Password $securePass
-      }
-      Add-LocalGroupMember -Group "Administrators" -Member $env:RDP_USER
-      Add-LocalGroupMember -Group "Remote Desktop Users" -Member $env:RDP_USER
-
-  - ps: |
-      Write-Host "Downloading and Extracting ngrok..."
-      $ngrokUrl = "https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip"
-      $zipPath = "$env:TEMP\ngrok.zip"
-      Invoke-WebRequest -Uri $ngrokUrl -OutFile $zipPath
-      Expand-Archive $zipPath -DestinationPath "C:\ngrok" -Force
-      Remove-Item $zipPath -Force
+  - sh: |
+      echo "Configuring macOS Screen Sharing (VNC)..."
+      # Turn on native macOS screen sharing/VNC capabilities
+      sudo defaults write /Library/Preferences/com.apple.RemoteManagement VNCAlwaysStart 1
       
-      & C:\ngrok\ngrok.exe config add-authtoken $env:NGROK_AUTHTOKEN
+      # Set a secure access password for the VNC connection
+      sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
+        -configure -clientopts -setvncpasswd -vncpasswd $VNC_PASS
+      
+      # Activate the remote management agent service
+      sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
+        -activate -configure -access -on -privs -all -restart -agent
+
+  - sh: |
+      echo "Downloading and Configuring ngrok for Mac..."
+      # Download the native macOS ARM/64 zip archive for ngrok
+      curl -Lk "https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-darwin-amd64.zip" -o ngrok.zip
+      unzip ngrok.zip
+      chmod +x ngrok
+      sudo mv ngrok /usr/local/bin/
+      rm ngrok.zip
+      
+      ngrok config add-authtoken $NGROK_AUTHTOKEN
 
 test_script:
-  - ps: |
-      Write-Host "Launching background ngrok TCP Tunnel..."
-      Start-Process "C:\ngrok\ngrok.exe" -ArgumentList "tcp 3389 --log=stdout"
-      Start-Sleep -Seconds 7
+  - sh: |
+      echo "Launching background ngrok VNC Tunnel..."
+      # Port 5900 is the official default global port for VNC Screen Sharing
+      ngrok tcp 5900 --log=stdout > /dev/null &
+      sleep 7
 
-      Write-Host "Fetching Tunnel Endpoint Details..."
-      $ngrokApi = Invoke-RestMethod -Uri "http://127.0.0.1:4040/api/tunnels"
-      $publicUrl = $ngrokApi.tunnels[0].public_url
+      echo "Fetching macOS Connection Details..."
+      PUBLIC_URL=$(curl -s http://127.0.0.1:4040/api/tunnels | grep -o 'tcp://[^"]*')
       
-      if (-not $publicUrl) {
-          Write-Error "Failed to retrieve ngrok public tunnel URL. Check your authtoken."
+      if [ -z "$PUBLIC_URL" ]; then
+          echo "Error: Failed to retrieve ngrok tunnel link. Verify your NGROK_AUTHTOKEN."
           exit 1
-      }
+      fi
       
-      $cleanAddress = $publicUrl -replace "tcp://", ""
+      CLEAN_ADDRESS=$(echo $PUBLIC_URL | sed 's/tcp:\/\///')
       
-      Write-Host "Thanks to Bullet for this perfect work"
-      
-      Write-Host "`n=================================="
-      Write-Host "====== APPVEYOR RDP ACCESS ======="
-      Write-Host "Address: $cleanAddress"
-      Write-Host "Username: $env:RDP_USER"
-      Write-Host "Password: $env:RDP_PASS"
-      Write-Host "==================================`n"
+      echo -e "\n=================================="
+      echo "====== APPVEYOR MACOS ACCESS ====="
+      echo "VNC Address: $CLEAN_ADDRESS"
+      echo "VNC Password: $VNC_PASS"
+      echo "==================================\n"
 
-      # Maintain the current machine connection for 50 minutes
-      $timeout = New-TimeSpan -Minutes 50
-      $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
-      while ($stopwatch.Elapsed -lt $timeout) {
-          Write-Host "[$(Get-Date)] RDP Session Heartbeat Active - AppVeyor Free Tier"
-          Start-Sleep -Seconds 300
-      }
+      # Maintain the current Mac machine container for 50 minutes
+      timeout 50m sh -c '
+        while true; do
+          echo "[$(date)] macOS Server Session Heartbeat Active"
+          sleep 300
+        done
+      '
 
-      # 24/7 Loop Action: Automatically triggers the next build before this one dies
-      if ($env:APPVEYOR_API_TOKEN) {
-          Write-Host "Triggering next automated 24/7 continuous cycle build..."
-          $headers = @{
-              "Authorization" = "Bearer $env:APPVEYOR_API_TOKEN"
-              "Content-Type"  = "application/json"
-          }
-          $body = @{
-              accountName = $env:APPVEYOR_ACCOUNT_NAME
-              projectSlug = $env:APPVEYOR_PROJECT_SLUG
-              branch      = $env:APPVEYOR_REPO_BRANCH
-          } | ConvertTo-Json
-          
-          Invoke-RestMethod -Uri "https://ci.appveyor.com/api/builds" -Method Post -Headers $headers -Body $body
-      } else {
-          Write-Host "Error: APPVEYOR_API_TOKEN variable missing in your dashboard settings panel."
-      }
+      # 24/7 Loop Action: Triggers the next sequential Mac build before this one finishes
+      if [ ! -z "$APPVEYOR_API_TOKEN" ]; then
+          echo "Triggering next automated 24/7 Mac continuous build cycle..."
+          curl -s -X POST "https://ci.appveyor.com/api/builds" \
+            -H "Authorization: Bearer $APPVEYOR_API_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"accountName\":\"$APPVEYOR_ACCOUNT_NAME\",\"projectSlug\":\"$APPVEYOR_PROJECT_SLUG\",\"branch\":\"$APPVEYOR_REPO_BRANCH\"}"
+      else
+          echo "Notice: APPVEYOR_API_TOKEN missing. Skipping auto-rebuild loop."
+      fi
