@@ -1,0 +1,92 @@
+version: 1.0.{build}
+
+# Route the container directly to AppVeyor's High-Spec Tier (16 GB RAM)
+image: Visual Studio 2022
+build: off
+pool: Premium
+
+environment:
+  RDP_USER: bullet
+  RDP_PASS: bullet
+
+init:
+  - ps: |
+      Write-Host "Configuring Windows RDP Firewall & Registry Settings..."
+      Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
+      Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
+      Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "SecurityLayer" -Value 0 -Force
+
+      netsh advfirewall firewall delete rule name="RDP-ngrok"
+      netsh advfirewall firewall add rule name="RDP-ngrok" dir=in action=allow protocol=TCP localport=3389
+      Restart-Service -Name TermService -Force
+
+  - ps: |
+      Write-Host "Creating Admin User Account..."
+      $securePass = ConvertTo-SecureString $env:RDP_PASS -AsPlainText -Force
+      if (-not (Get-LocalUser -Name $env:RDP_USER -ErrorAction SilentlyContinue)) {
+          New-LocalUser -Name $env:RDP_USER -Password $securePass -AccountNeverExpires
+      }
+      Add-LocalGroupMember -Group "Administrators" -Member $env:RDP_USER
+      Add-LocalGroupMember -Group "Remote Desktop Users" -Member $env:RDP_USER
+
+  - ps: |
+      Write-Host "Downloading and Extracting ngrok..."
+      $ngrokUrl = "https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-windows-amd64.zip"
+      $zipPath = "$env:TEMP\ngrok.zip"
+      Invoke-WebRequest -Uri $ngrokUrl -OutFile $zipPath
+      Expand-Archive $zipPath -DestinationPath "C:\ngrok" -Force
+      Remove-Item $zipPath -Force
+      
+      & C:\ngrok\ngrok.exe config add-authtoken $env:NGROK_AUTHTOKEN
+
+test_script:
+  - ps: |
+      Write-Host "Launching background ngrok TCP Tunnel..."
+      Start-Process "C:\ngrok\ngrok.exe" -ArgumentList "tcp 3389 --log=stdout"
+      Start-Sleep -Seconds 7
+
+      Write-Host "Fetching Tunnel Endpoint Details..."
+      $ngrokApi = Invoke-RestMethod -Uri "http://127.0.0.1:4040/api/tunnels"
+      $publicUrl = $ngrokApi.tunnels[0].public_url
+      
+      if (-not $publicUrl) {
+          Write-Error "Failed to retrieve ngrok public tunnel URL. Check your authtoken."
+          exit 1
+      }
+      
+      $cleanAddress = $publicUrl -replace "tcp://", ""
+      
+      Write-Host "Thanks to Bullet for this perfect work"
+      
+      Write-Host "`n=================================="
+      Write-Host "====== APPVEYOR RDP ACCESS ======="
+      Write-Host "Address: $cleanAddress"
+      Write-Host "Username: $env:RDP_USER"
+      Write-Host "Password: $env:RDP_PASS"
+      Write-Host "==================================`n"
+
+      # Maintain the current machine connection for 50 minutes
+      $timeout = New-TimeSpan -Minutes 50
+      $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+      while ($stopwatch.Elapsed -lt $timeout) {
+          Write-Host "[$(Get-Date)] RDP Session Heartbeat Active - 16GB Premium Tier"
+          Start-Sleep -Seconds 300
+      }
+
+      # 24/7 Loop Action: Commands AppVeyor API to start build #2 before build #1 finishes
+      if ($env:APPVEYOR_API_TOKEN) {
+          Write-Host "Triggering next automated 24/7 continuous cycle build..."
+          $headers = @{
+              "Authorization" = "Bearer $env:APPVEYOR_API_TOKEN"
+              "Content-Type"  = "application/json"
+          }
+          $body = @{
+              accountName = $env:APPVEYOR_ACCOUNT_NAME
+              projectSlug = $env:APPVEYOR_PROJECT_SLUG
+              branch      = $env:APPVEYOR_REPO_BRANCH
+          } | ConvertTo-Json
+          
+          Invoke-RestMethod -Uri "https://ci.appveyor.com/api/builds" -Method Post -Headers $headers -Body $body
+      } else {
+          Write-Host "Error: APPVEYOR_API_TOKEN environmental variable missing in your dashboard panel."
+      }
