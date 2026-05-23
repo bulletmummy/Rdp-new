@@ -1,12 +1,12 @@
 version: 1.0.{build}
 
-# Use AppVeyor's standard high-performance Windows image
 image: Visual Studio 2022
 build: off
 
 environment:
   RDP_USER: bullet
-  RDP_PASS: bullet
+  # Fixed: Changed password to meet Windows Server complexity requirements
+  RDP_PASS: "BulletSecure2026!"
 
 init:
   - ps: |
@@ -23,7 +23,10 @@ init:
       Write-Host "Creating Admin User Account..."
       $securePass = ConvertTo-SecureString $env:RDP_PASS -AsPlainText -Force
       if (-not (Get-LocalUser -Name $env:RDP_USER -ErrorAction SilentlyContinue)) {
-          New-LocalUser -Name $env:RDP_USER -Password $securePass -AccountNeverExpires
+          New-LocalUser -Name $env:RDP_USER -Password $securePass -AccountNeverExpires -Description "Secure RDP User Account"
+      } else {
+          $user = Get-LocalUser -Name $env:RDP_USER
+          $user | Set-LocalUser -Password $securePass
       }
       Add-LocalGroupMember -Group "Administrators" -Member $env:RDP_USER
       Add-LocalGroupMember -Group "Remote Desktop Users" -Member $env:RDP_USER
