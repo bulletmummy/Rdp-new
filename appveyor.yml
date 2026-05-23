@@ -7,25 +7,27 @@ build: off
 
 init:
   - sh: |
-      echo "Installing Independent VNC Server (TigerVNC)..."
-      # Use Homebrew to install a standard standalone VNC server framework
-      brew install tigervnc
-
-      echo "Configuring standalone security password..."
-      mkdir -p ~/.vnc
+      echo "Configuring Native macOS Screen Sharing (VNC)..."
+      # Bypass package managers entirely and configure the built-in system daemon
+      sudo defaults write /Library/Preferences/com.apple.RemoteManagement VNCAlwaysStart 1
       
-      # Inject the custom access password natively into the virtual frame configuration
-      echo "Bul2026!" | vncpasswd -f > ~/.vnc/passwd
-      chmod 600 ~/.vnc/passwd
-
-      echo "Launching VNC display server context..."
-      # Boot the standalone server on virtual port :1 (mapped natively to networking port 5901)
-      vncserver :1 -geometry 1280x720 -localhost no
+      # Force authentication layer settings and apply the global VNC password
+      sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
+        -configure -clientopts -setvnclegacy yes -setvncpw yes -vncpw "Bul2026!"
+      
+      # Open up access control privileges to permit desktop interaction
+      sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
+        -configure -access -on -privs -all
+      
+      # Restart the framework agent to instantly apply the new setup
+      sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
+        -activate -restart -agent
 
   - sh: |
       echo "Downloading and Configuring ngrok..."
+      # Pull the pre-compiled binary zip directly to guarantee high-speed initialization
       curl -Lk "https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-darwin-amd64.zip" -o ngrok.zip
-      unzip ngrok.zip
+      unzip -q ngrok.zip
       chmod +x ngrok
       sudo mv ngrok /usr/local/bin/
       rm ngrok.zip
@@ -33,21 +35,21 @@ init:
       if [ ! -z "$NGROK_AUTHTOKEN" ]; then
           ngrok config add-authtoken $NGROK_AUTHTOKEN
       else
-          echo "Warning: NGROK_AUTHTOKEN variable is empty. Secure it inside Web Settings."
+          echo "Error: NGROK_AUTHTOKEN is empty. Check your Environment panel variables."
       fi
 
 test_script:
   - sh: |
-      echo "Launching background ngrok tunnel to TigerVNC display listener..."
-      # Crucial: TigerVNC uses network port 5901 for display :1 instead of standard Apple 5900
-      ngrok tcp 5901 --log=stdout > /dev/null &
-      sleep 7
+      echo "Launching background ngrok tunnel to native port 5900..."
+      # Route the secure public TCP tunnel directly to the standard screen sharing port
+      ngrok tcp 5900 --log=stdout > /dev/null &
+      sleep 5
 
       echo "Fetching macOS Connection Details..."
       PUBLIC_URL=$(curl -s http://127.0.0.1:4040/api/tunnels | grep -o 'tcp://[^"]*')
       
       if [ -z "$PUBLIC_URL" ]; then
-          echo "Error: Failed to retrieve ngrok tunnel link. Verify your token configuration."
+          echo "Error: Failed to fetch ngrok endpoint. Verify your authtoken configuration."
           exit 1
       fi
       
@@ -57,10 +59,9 @@ test_script:
       echo "====== APPVEYOR MACOS ACCESS ====="
       echo "VNC Address: $CLEAN_ADDRESS"
       echo "Password: Bul2026!"
-      echo "Note: Username is NOT required."
       echo "==================================\n"
 
-      # Keep the environment container session alive for 50 minutes
+      # Keep the active cloud container context open for 50 minutes
       timeout 50m sh -c '
         while true; do
           echo "[$(date)] macOS Server Session Heartbeat Active"
@@ -68,13 +69,13 @@ test_script:
         done
       '
 
-      # Check for API credentials to automatically cycle the pipeline continuous execution
+      # Automatically chain-trigger the next execution loop pass if token is present
       if [ ! -z "$APPVEYOR_API_TOKEN" ]; then
-          echo "Triggering next automated Mac rolling loop instance..."
+          echo "Triggering next automated Mac pipeline loop entry..."
           curl -s -X POST "https://ci.appveyor.com/api/builds" \
             -H "Authorization: Bearer $APPVEYOR_API_TOKEN" \
             -H "Content-Type: application/json" \
             -d "{\"accountName\":\"$APPVEYOR_ACCOUNT_NAME\",\"projectSlug\":\"$APPVEYOR_PROJECT_SLUG\",\"branch\":\"$APPVEYOR_REPO_BRANCH\"}"
       else
-          echo "Notice: APPVEYOR_API_TOKEN missing. Rolling loop sequence omitted."
+          echo "Notice: APPVEYOR_API_TOKEN missing. Automated looping skipped."
       fi
