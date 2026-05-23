@@ -1,12 +1,9 @@
 version: 1.0.{build}
 
-# Switch the operating system image to macOS
 image: macOS
-
 build: off
 
 environment:
-  # VNC requires a 6-to-8 character password
   VNC_PASS: "Bul2026!"
 
 init:
@@ -15,9 +12,9 @@ init:
       # Turn on native macOS screen sharing/VNC capabilities
       sudo defaults write /Library/Preferences/com.apple.RemoteManagement VNCAlwaysStart 1
       
-      # Set a secure access password for the VNC connection
+      # Fixed: Corrected the exact flags based on the kickstart output log helper
       sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
-        -configure -clientopts -setvncpasswd -vncpasswd $VNC_PASS
+        -configure -clientopts -setvnclegacy yes -setvncpw yes -vncpw $VNC_PASS
       
       # Activate the remote management agent service
       sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
@@ -25,19 +22,22 @@ init:
 
   - sh: |
       echo "Downloading and Configuring ngrok for Mac..."
-      # Download the native macOS ARM/64 zip archive for ngrok
       curl -Lk "https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-darwin-amd64.zip" -o ngrok.zip
       unzip ngrok.zip
       chmod +x ngrok
       sudo mv ngrok /usr/local/bin/
       rm ngrok.zip
       
-      ngrok config add-authtoken $NGROK_AUTHTOKEN
+      # Fixed safety fallback check to avoid throwing code 1 if variable is blank
+      if [ ! -z "$NGROK_AUTHTOKEN" ]; then
+          ngrok config add-authtoken $NGROK_AUTHTOKEN
+      else
+          echo "Warning: NGROK_AUTHTOKEN is empty. Paste your token in AppVeyor settings."
+      fi
 
 test_script:
   - sh: |
       echo "Launching background ngrok VNC Tunnel..."
-      # Port 5900 is the official default global port for VNC Screen Sharing
       ngrok tcp 5900 --log=stdout > /dev/null &
       sleep 7
 
@@ -57,7 +57,6 @@ test_script:
       echo "VNC Password: $VNC_PASS"
       echo "==================================\n"
 
-      # Maintain the current Mac machine container for 50 minutes
       timeout 50m sh -c '
         while true; do
           echo "[$(date)] macOS Server Session Heartbeat Active"
@@ -65,7 +64,6 @@ test_script:
         done
       '
 
-      # 24/7 Loop Action: Triggers the next sequential Mac build before this one finishes
       if [ ! -z "$APPVEYOR_API_TOKEN" ]; then
           echo "Triggering next automated 24/7 Mac continuous build cycle..."
           curl -s -X POST "https://ci.appveyor.com/api/builds" \
