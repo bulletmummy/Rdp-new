@@ -1,9 +1,8 @@
 version: 1.0.{build}
 
-# Route the container directly to AppVeyor's High-Spec Tier (16 GB RAM)
+# Use AppVeyor's standard high-performance Windows image
 image: Visual Studio 2022
 build: off
-pool: Premium
 
 environment:
   RDP_USER: bullet
@@ -69,11 +68,11 @@ test_script:
       $timeout = New-TimeSpan -Minutes 50
       $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
       while ($stopwatch.Elapsed -lt $timeout) {
-          Write-Host "[$(Get-Date)] RDP Session Heartbeat Active - 16GB Premium Tier"
+          Write-Host "[$(Get-Date)] RDP Session Heartbeat Active - AppVeyor Free Tier"
           Start-Sleep -Seconds 300
       }
 
-      # 24/7 Loop Action: Commands AppVeyor API to start build #2 before build #1 finishes
+      # 24/7 Loop Action: Automatically triggers the next build before this one dies
       if ($env:APPVEYOR_API_TOKEN) {
           Write-Host "Triggering next automated 24/7 continuous cycle build..."
           $headers = @{
@@ -88,5 +87,5 @@ test_script:
           
           Invoke-RestMethod -Uri "https://ci.appveyor.com/api/builds" -Method Post -Headers $headers -Body $body
       } else {
-          Write-Host "Error: APPVEYOR_API_TOKEN environmental variable missing in your dashboard panel."
+          Write-Host "Error: APPVEYOR_API_TOKEN variable missing in your dashboard settings panel."
       }
