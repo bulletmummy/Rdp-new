@@ -7,75 +7,63 @@ build: off
 
 init:
   - sh: |
-      echo "Setting up standard compatible Python VNC engine..."
-      # Install a pure python VNC layer to bypass native Mac/Homebrew restrictions
-      pip3 install proxy.py tools > /dev/null 2>&1 || true
+      echo "Downloading AnyDesk for macOS..."
+      # Download the official stable AnyDesk production disk image
+      curl -Lk "https://download.anydesk.com/desktop/anydesk.dmg" -o anydesk.dmg
+
+      echo "Mounting installation image..."
+      sudo hdiutil attach anydesk.dmg -nobrowse
       
-      echo "Configuring desktop server protocol fallback..."
-      sudo defaults write /Library/Preferences/com.apple.RemoteManagement VNCAlwaysStart 1
+      echo "Installing AnyDesk application into system directory..."
+      sudo cp -R /Volumes/AnyDesk/AnyDesk.app /Applications/
       
-      # Force raw VNC authentication compatibility mode
-      sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
-        -configure -clientopts -setvnclegacy yes -setvncpw yes -vncpw "Bul2026!"
-      
-      sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
-        -configure -access -on -privs -all -users appveyor
-        
-      sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
-        -activate -restart -agent
+      echo "Unmounting installation image..."
+      sudo hdiutil detach /Volumes/AnyDesk
+      rm anydesk.dmg
 
   - sh: |
-      echo "Downloading and Configuring ngrok..."
-      curl -Lk "https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-darwin-amd64.zip" -o ngrok.zip
-      unzip -q ngrok.zip
-      chmod +x ngrok
-      sudo mv ngrok /usr/local/bin/
-      rm ngrok.zip
-      
-      if [ ! -z "$NGROK_AUTHTOKEN" ]; then
-          ngrok config add-authtoken $NGROK_AUTHTOKEN
-      else
-          echo "Error: NGROK_AUTHTOKEN is missing. Check your Environment variables panel."
-      fi
+      echo "Configuring unattended remote access..."
+      # Setup unattended password execution natively through the AnyDesk binary context
+      echo "Bul2026!" | sudo /Applications/AnyDesk.app/Contents/MacOS/AnyDesk --set-password
+
+      echo "Starting AnyDesk background service daemon..."
+      # Run the application service engine in the background
+      sudo /Applications/AnyDesk.app/Contents/MacOS/AnyDesk --service &
+      sleep 15
 
 test_script:
   - sh: |
-      echo "Launching background ngrok tunnel to port 5900..."
-      ngrok tcp 5900 --log=stdout > /dev/null &
-      sleep 5
-
-      echo "Fetching macOS Connection Details..."
-      PUBLIC_URL=$(curl -s http://127.0.0.1:4040/api/tunnels | grep -o 'tcp://[^"]*')
+      echo "Retrieving unique AnyDesk Connection ID..."
+      # Pull the system-assigned ID key from the application layer configuration
+      ANYDESK_ID=$(sudo /Applications/AnyDesk.app/Contents/MacOS/AnyDesk --get-id)
       
-      if [ -z "$PUBLIC_URL" ]; then
-          echo "Error: Failed to fetch ngrok endpoint. Verify your authtoken configuration."
-          exit 1
+      if [ -z "$ANYDESK_ID" ] || [ "$ANYDESK_ID" == "0" ]; then
+          echo "Retrying connection ID generation pass..."
+          sleep 12
+          ANYDESK_ID=$(sudo /Applications/AnyDesk.app/Contents/MacOS/AnyDesk --get-id)
       fi
-      
-      CLEAN_ADDRESS=$(echo $PUBLIC_URL | sed 's/tcp:\/\///')
-      
-      echo -e "\n=================================="
-      echo "====== APPVEYOR MACOS ACCESS ====="
-      echo "VNC Address: $CLEAN_ADDRESS"
-      echo "Username: appveyor"
-      echo "Password: Bul2026!"
-      echo "==================================\n"
 
-      # Keep the active cloud container context open for 50 minutes
+      echo -e "\n=========================================="
+      echo "======= APPVEYOR ANYDESK ACCESS ========"
+      echo " AnyDesk ID: $ANYDESK_ID"
+      echo " Password:   Bul2026!"
+      echo "==========================================\n"
+
+      # Keep the active cloud container runtime open for 50 minutes
       timeout 50m sh -c '
         while true; do
-          echo "[$(date)] macOS Server Session Heartbeat Active"
+          echo "[$(date)] AnyDesk Connection Session Engine Active"
           sleep 300
         done
       '
 
-      # Automatically chain-trigger the next execution loop pass if token is present
+      # Automatically chain-trigger the next continuous integration loop entry pass if token is saved
       if [ ! -z "$APPVEYOR_API_TOKEN" ]; then
-          echo "Triggering next automated Mac pipeline loop entry..."
+          echo "Triggering next automated pipeline loop entry sequence..."
           curl -s -X POST "https://ci.appveyor.com/api/builds" \
             -H "Authorization: Bearer $APPVEYOR_API_TOKEN" \
             -H "Content-Type: application/json" \
             -d "{\"accountName\":\"$APPVEYOR_ACCOUNT_NAME\",\"projectSlug\":\"$APPVEYOR_PROJECT_SLUG\",\"branch\":\"$APPVEYOR_REPO_BRANCH\"}"
       else
-          echo "Notice: APPVEYOR_API_TOKEN missing. Automated looping skipped."
+          echo "Notice: APPVEYOR_API_TOKEN missing from Web Settings. Auto-looping skipped."
       fi
