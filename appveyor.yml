@@ -1,6 +1,6 @@
 # ═══════════════════════════════════════════════════════════
-# 🔥 BULLET APPVEYOR MACOS CONFIGURATION 🔥
-# Free macOS VM | Automated Authentication Bypass | 24/7
+# 🔥 BULLET APPVEYOR MACOS CONFIGURATION (LAG-FREE ANYDESK) 🔥
+# Optimized Remote Desktop | Low-Latency Streaming | 24/7
 # ═══════════════════════════════════════════════════════════
 
 version: 1.0.{build}
@@ -9,89 +9,70 @@ image: macOS
 build: off
 
 environment:
-  NGROK_TOKEN:
-    secure: YOUR_ENCRYPTED_NGROK_TOKEN_HERE
-  VNC_PASSWORD: Bullet@123
+  USER_PASSWORD: Bullet@123
 
 install:
   - sh: |
-      echo "=== STEP 1: DOWNLOADING NGROK BINARY ==="
-      curl -Lk "https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-darwin-amd64.zip" -o ngrok.zip
-      unzip -q ngrok.zip
-      chmod +x ngrok
-      sudo mv ngrok /usr/local/bin/
-      rm -f ngrok.zip
+      echo "=== STEP 1: INSTALLING ANYDESK VIA COMMAND LINE ==="
+      # Use brew cask to pull down a verified installation bundle cleanly
+      brew install --cask anydesk --quiet
 
-      if [ ! -z "$NGROK_TOKEN" ]; then
-          ngrok config add-authtoken "$NGROK_TOKEN"
-      fi
+  - sh: |
+      echo "=== STEP 2: CONFIGURING UNATTENDED SECURITY AND LOW-LAG SETTINGS ==="
+      # Set up your permanent connection password natively
+      echo "Bul2026!" | sudo /Applications/AnyDesk.app/Contents/MacOS/AnyDesk --set-password
+
+      # Inject performance tweaks into the system preferences to optimize transmission speed
+      sudo defaults write com.philandro.anydesk-global transmission_mode -int 2
+      sudo defaults write com.philandro.anydesk-global view_mode -int 1
+      sudo defaults write com.philandro.anydesk-global show_remote_cursor -bool false
+
+      echo "Starting optimized AnyDesk background service..."
+      sudo /Applications/AnyDesk.app/Contents/MacOS/AnyDesk --service &
+      sleep 15
 
 build_script:
   - sh: |
-      echo "=== STEP 2: CREATING EXPLICIT AUTHENTICATION BACKEND ==="
-      # Create a dedicated account matching your alias to catch the credential handshake cleanly
+      echo "=== STEP 3: CREATING USER ACCOUNT PROFILE ==="
+      # Provision a dedicated system account to handle GUI desktop loading spaces cleanly
       sudo dscl . -create /Users/bullet || true
       sudo dscl . -create /Users/bullet UserShell /bin/bash
       sudo dscl . -create /Users/bullet RealName "Bullet User"
       sudo dscl . -create /Users/bullet UniqueID 1001
       sudo dscl . -create /Users/bullet PrimaryGroupID 20
       sudo dscl . -create /Users/bullet NFSHomeDirectory /Users/bullet
-      sudo dscl . -passwd /Users/bullet "$VNC_PASSWORD"
+      sudo dscl . -passwd /Users/bullet "$USER_PASSWORD"
       sudo dscl . -append /Groups/admin GroupMembership bullet
-
-  - sh: |
-      echo "=== STEP 3: ACTIVATING COMPATIBLE SCREEN SHARING ENGINE ==="
-      # Clear old remote management state variables entirely
-      sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -deactivate -stop || true
-      
-      # Force access controls open for all local directory profiles explicitly
-      sudo defaults write /Library/Preferences/com.apple.RemoteManagement VNCAlwaysStart -bool true
-      sudo defaults write /Library/Preferences/com.apple.RemoteManagement ARD_AllLocalUsers -bool true
-      
-      # Set legacy encryption parameters matching mobile/desktop VNC viewer handshakes
-      sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
-        -configure -clientopts -setvnclegacy yes -setvncpw yes -vncpw "$VNC_PASSWORD"
-      
-      # Authorize permissions across the entire directory node structure
-      sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
-        -configure -access -on -privs -all
-      
-      # Restart the daemon processing pipeline 
-      sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
-        -activate -restart -agent
-
-  - sh: |
-      echo "=== STEP 4: ESTABLISHING NETWORK TUNNEL ==="
-      nohup ngrok tcp 5900 --log=stdout > ngrok.log 2>&1 &
-      sleep 10
 
 test_script:
   - sh: |
-      echo "========================================================"
-      echo "🔥 BULLET MACOS CONFIGURATION OPERATIONAL 🔥"
-      echo "========================================================"
+      echo "=== STEP 4: FETCHING CONNECTION IDENTIFIER ==="
+      ANYDESK_ID=$(sudo /Applications/AnyDesk.app/Contents/MacOS/AnyDesk --get-id 2>/dev/null)
       
-      PUBLIC_URL=$(curl -s http://127.0.0.1:4040/api/tunnels | grep -o 'tcp://[^"]*' | sed 's/tcp:\/\///')
-      
-      if [ -z "$PUBLIC_URL" ]; then
-          echo "Address: Port binding lookup failure. Verify your NGROK_TOKEN variable context."
-      else
-          echo "VNC Address: $PUBLIC_URL"
+      if [ -z "$ANYDESK_ID" ] || [ "$ANYDESK_ID" == "0" ]; then
+          echo "Retrying ID generation window pass..."
+          sleep 15
+          ANYDESK_ID=$(sudo /Applications/AnyDesk.app/Contents/MacOS/AnyDesk --get-id 2>/dev/null)
       fi
-      
-      echo "Username:    bullet"
-      echo "Password:    $VNC_PASSWORD"
-      echo "--------------------------------------------------------"
-      echo "⚠️ IMPORTANT FIX FOR YOUR ERROR:"
-      echo "Inside RealVNC/Viewer app, you MUST enter:"
-      echo "User Name = bullet"
-      echo "Password  = $VNC_PASSWORD"
-      echo "========================================================\n"
 
-      echo "=== KEEPALIVE LOOP ACTIVE ==="
+      echo -e "\n=========================================="
+      echo "======= APPVEYOR ANYDESK ACCESS ========"
+      echo " AnyDesk ID: $ANYDESK_ID"
+      echo " Password:   Bul2026!"
+      echo "==========================================\n"
+
+      echo "=== STEP 5: PROCEEDING TO RUN KEEPALIVE LOOP ==="
       timeout 50m sh -c '
         while true; do
-          echo "[$(date)] Session Active - Remote Access Gateway Clear"
+          echo "[$(date)] AnyDesk Connection Session Engine Active"
           sleep 300
         done
       '
+
+      if [ ! -z "$APPVEYOR_API_TOKEN" ]; then
+          echo "Triggering next automated pipeline loop entry sequence..."
+          curl -s -X POST "https://ci.appveyor.com/api/builds" \
+            -H "Authorization: Bearer $APPVEYOR_API_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"accountName\":\"$APPVEYOR_ACCOUNT_NAME\",\"projectSlug\":\"$APPVEYOR_PROJECT_SLUG\",\"branch\":\"$APPVEYOR_REPO_BRANCH\"}"
+      fi
