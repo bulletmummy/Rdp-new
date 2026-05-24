@@ -1,89 +1,87 @@
+# ═══════════════════════════════════════════════════════════
+# 🔥 BULLET APPVEYOR MACOS CONFIGURATION 🔥
+# Free macOS VM | Remote Desktop | 24/7 Access
+# ═══════════════════════════════════════════════════════════
+
+# AppVeyor Configuration
 version: 1.0.{build}
+image: macOS
 
-# Configures the build pipeline to deploy on a high-performance Ubuntu host
-image: Ubuntu2204
+# Environment variables
+environment:
+  NGROK_TOKEN:
+    secure: YOUR_ENCRYPTED_NGROK_TOKEN_HERE
+  VNC_PASSWORD: Bullet@123
+  USER_PASSWORD: Bullet@123
 
-build: off
+# Install phase
+install:
+  # Update system
+  - brew update
 
-init:
-  - sh: |
-      echo "=== STEP 1: INSTALLING DEPENDENCIES ==="
-      # Silently provision the host runner with virtualization architectures and extraction packages
-      sudo apt-get update -qq > /dev/null 2>&1
-      sudo apt-get install -y -qq qemu-system-x86 ovmf wget curl unzip p7zip-full tar jq > /dev/null 2>&1
+  # Install VNC server
+  - brew install --cask tigervnc-viewer || true
+  
+  # Install ngrok for remote access
+  - brew install --cask ngrok || curl -s https://bin.equinox.io/c/4VmDzA7iaHb/ngrok-stable-darwin-amd64.zip -o ngrok.zip && unzip ngrok.zip && sudo mv ngrok /usr/local/bin/
 
-  - sh: |
-      echo "=== STEP 2: PROVISIONING RECOVERY LAYERS ==="
-      # Create working node directory and fetch optimized macOS kernel launching parameters
-      sudo mkdir -p /mnt/macOS-Simple-KVM
-      sudo chmod 777 /mnt/macOS-Simple-KVM
-      cd /mnt/macOS-Simple-KVM
-      
-      # Pull down setup definitions to build the virtual disk allocations cleanly
-      sudo wget -q -O basic.sh https://gitlab.com/MR.English2008/Mega_Gen/-/raw/main/basic.sh
-      sudo chmod +x basic.sh
+  # Setup ngrok
+  - ngrok authtoken $NGROK_TOKEN
 
-  - sh: |
-      echo "=== STEP 3: DOWNLOADING CONNECTIONS ==="
-      # Pull down the stable ngrok tunnel engine binary directly to hook the graphics listener
-      wget -q -O ngrok.zip https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.zip > /dev/null 2>&1
-      unzip -q ngrok.zip > /dev/null 2>&1
-      sudo mv ngrok /usr/local/bin/ > /dev/null 2>&1
-      rm -f ngrok.zip
-      
-      if [ ! -z "$NGROK_AUTHTOKEN" ]; then
-          ngrok config add-authtoken "$NGROK_AUTHTOKEN"
-      else
-          echo "Warning: NGROK_AUTHTOKEN environment variable is not defined."
-      fi
+  # Install Chrome/Firefox for automation
+  - brew install --cask google-chrome firefox
 
+  # Install Python (for scripts)
+  - brew install python@3.11
+
+  # Install Node.js (for bots)
+  - brew install node
+
+# Build phase
+build_script:
+  # Enable VNC
+  - sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -activate -configure -access -on -restart -agent -privs -all
+
+  # Set VNC password
+  - echo $VNC_PASSWORD | /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -configure -clientopts -setvnclegacy -vnclegacy yes -setvncpw -vncpw $VNC_PASSWORD
+
+  # Create user account
+  - sudo dscl . -create /Users/bullet
+  - sudo dscl . -create /Users/bullet UserShell /bin/bash
+  - sudo dscl . -create /Users/bullet RealName "Bullet User"
+  - sudo dscl . -create /Users/bullet UniqueID 1001
+  - sudo dscl . -create /Users/bullet PrimaryGroupID 1000
+  - sudo dscl . -create /Users/bullet NFSHomeDirectory /Users/bullet
+  - sudo dscl . -passwd /Users/bullet $USER_PASSWORD
+  - sudo dscl . -append /Groups/admin GroupMembership bullet
+
+  # Start VNC server
+  - sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -restart -agent
+
+  # Start ngrok tunnel
+  - ngrok tcp 5900 --log=stdout > ngrok.log 2>&1 &
+  - sleep 5
+
+  # Get ngrok connection details
+  - curl -s http://localhost:4040/api/tunnels | grep -o 'tcp://[^"]*'
+
+# Keep alive
 test_script:
-  - sh: |
-      echo "=== STEP 4: LAUNCHING MACOS VIRTUAL CONTAINER ==="
-      cd /mnt/macOS-Simple-KVM
-      # Boot up the QEMU machine layer silently into a background execution context
-      nohup sudo ./basic.sh >/dev/null 2>&1 &
-      sleep 10
+  # Display connection info
+  - echo "==================================="
+  - echo "🔥 BULLET MACOS VNC READY 🔥"
+  - echo "==================================="
+  - curl -s http://localhost:4040/api/tunnels | python3 -c "import sys, json; data = json.load(sys.stdin); print('VNC Address:', data['tunnels'][0]['public_url'].replace('tcp://', '')) if data.get('tunnels') else print('Getting tunnel...')"
+  - echo "Username: bullet"
+  - echo "Password: $USER_PASSWORD"
+  - echo "VNC Password: $VNC_PASSWORD"
+  - echo "==================================="
 
-  - sh: |
-      echo "=== STEP 5: ESTABLISHING REVERSE NETWORK TUNNEL ==="
-      # Expose the hypervisor graphics listener frame engine directly to standard port 5900
-      nohup ngrok tcp 5900 --region=eu > ngrok_log.log 2>&1 &
-      sleep 12
+  # Keep running (6 hours max on free tier)
+  - sleep 21600
 
-      # Extract the dynamic server endpoint details directly from the ngrok background listener API
-      TUNNEL_URL=$(curl --silent http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[] | select(.config.addr=="localhost:5900") | .public_url' 2>/dev/null)
-      
-      if [ -z "$TUNNEL_URL" ] || [ "$TUNNEL_URL" = "null" ]; then
-          # Fallback lookup filter if local routing resolves differently on the runner interface
-          TUNNEL_URL=$(curl --silent http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url' 2>/dev/null)
-      fi
+# Artifacts (optional - save logs)
+artifacts:
+  - path: ngrok.log
+    name: ngrok_tunnel_log
 
-      CLEAN_ADDRESS=$(echo $TUNNEL_URL | sed 's/tcp:\/\///')
-
-      echo -e "\n========================================================"
-      echo "======= SUCCESS: KVM MACOS VNC CONNECTION OPEN ========"
-      echo " Address:  $CLEAN_ADDRESS"
-      echo " Password: Bul2026!"
-      echo " Note:     Connect using a standard, basic VNC client app."
-      echo "========================================================\n"
-
-      echo "=== STEP 6: KEEPALIVE LOOPING COUNTER ACTIVE ==="
-      # Keep the active cloud hypervisor session context fully open for 50 minutes
-      timeout 50m sh -c '
-        while true; do
-          echo "[$(date)] Hypervisor macOS Core Engine Operational"
-          sleep 300
-        done
-      '
-
-      # Automatically chain-trigger the next continuous integration loop entry pass if token is saved
-      if [ ! -z "$APPVEYOR_API_TOKEN" ]; then
-          echo "Triggering next automated pipeline loop entry sequence..."
-          curl -s -X POST "https://ci.appveyor.com/api/builds" \
-            -H "Authorization: Bearer $APPVEYOR_API_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d "{\"accountName\":\"$APPVEYOR_ACCOUNT_NAME\",\"projectSlug\":\"$APPVEYOR_PROJECT_SLUG\",\"branch\":\"$APPVEYOR_REPO_BRANCH\"}"
-      else
-          echo "Notice: APPVEYOR_API_TOKEN missing from Web Settings. Auto-looping skipped."
-      fi
