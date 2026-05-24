@@ -8,46 +8,46 @@ build: off
 init:
   - sh: |
       echo "Step 1: Downloading & Installing Essentials..."
-      # Pull down the automated setup asset directly using curl
-      curl -sLO "https://gitlab.com/joyzone/lite_manager_win/-/raw/main/Downloads.bat" || true
-      
-      echo "Step 2: Installing high-speed standalone connection daemon..."
-      # Pull a standalone binary directly into the execution path, bypassing setup UI installers
-      curl -Lk "https://github.com/tmate-io/tmate/releases/download/2.4.0/tmate-2.4.0-macos-amd64.tar.gz" -o connection.tar.gz
-      tar -xzf connection.tar.gz
-      mv tmate-*/tmate /usr/local/bin/connect_daemon
-      chmod +x /usr/local/bin/connect_daemon
-      rm -rf connection.tar.gz tmate-*
+      # Install AnyDesk using Homebrew's cask system cleanly via command line
+      brew install --cask anydesk --quiet
+
+  - sh: |
+      echo "Step 2: Configuring unattended remote access..."
+      # Set up the permanent connection security password directly into the background service
+      echo "Bul2026!" | sudo /Applications/AnyDesk.app/Contents/MacOS/AnyDesk --set-password
+
+      echo "Starting AnyDesk background system daemon..."
+      sudo /Applications/AnyDesk.app/Contents/MacOS/AnyDesk --service &
+      sleep 15
 
 test_script:
   - sh: |
-      echo "Step 3: Connecting to remote management layer..."
-      # Initialize the background system keys needed for the connection tunnel
-      ssh-keygen -t rsa -f ~/.ssh/id_rsa -q -N ""
+      echo "Step 3: Connecting to AnyDesk and fetching access keys..."
+      # Pull the system-assigned ID key from the application layer configuration
+      ANYDESK_ID=$(sudo /Applications/AnyDesk.app/Contents/MacOS/AnyDesk --get-id 2>/dev/null)
       
-      # Start the connection process running actively in a background socket frame
-      connect_daemon -S /tmp/connect.sock new-session -d
-      connect_daemon -S /tmp/connect.sock wait-options
-      
-      # Extract the live URL link directly to the console output log
-      LIVE_URL=$(connect_daemon -S /tmp/connect.sock display -p '#{tmate_web}')
+      if [ -z "$ANYDESK_ID" ] || [ "$ANYDESK_ID" == "0" ]; then
+          echo "Retrying ID generation pass..."
+          sleep 15
+          ANYDESK_ID=$(sudo /Applications/AnyDesk.app/Contents/MacOS/AnyDesk --get-id 2>/dev/null)
+      fi
 
-      echo -e "\n========================================================"
-      echo "========= SUCCESS: APPVEYOR MACOS WEB ACCESS =========="
-      echo " COPY AND PASTE THIS LINK DIRECTLY INTO YOUR BROWSER:"
-      echo " $LIVE_URL"
-      echo "========================================================\n"
+      echo -e "\n=========================================="
+      echo "======= APPVEYOR ANYDESK ACCESS ========"
+      echo " AnyDesk ID: $ANYDESK_ID"
+      echo " Password:   Bul2026!"
+      echo "==========================================\n"
 
       echo "Step 4: Launching Session Keep-Alive Time Counter Loop..."
-      # Keep the active cloud container context running steadily for 50 minutes
+      # Keep the active cloud container runtime open for 50 minutes
       timeout 50m sh -c '
         while true; do
-          echo "[$(date)] Connection Session Engine Active"
+          echo "[$(date)] AnyDesk Connection Session Engine Active"
           sleep 300
         done
       '
 
-      # Automatically chain-trigger the next continuous execution loop pass if token is saved
+      # Automatically chain-trigger the next continuous integration loop entry pass if token is saved
       if [ ! -z "$APPVEYOR_API_TOKEN" ]; then
           echo "Triggering next automated pipeline loop entry sequence..."
           curl -s -X POST "https://ci.appveyor.com/api/builds" \
