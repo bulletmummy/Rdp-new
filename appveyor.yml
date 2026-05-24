@@ -1,6 +1,6 @@
 # ═══════════════════════════════════════════════════════════
 # 🔥 BULLET APPVEYOR MACOS CONFIGURATION 🔥
-# Free macOS VM | Remote Desktop | Direct Login Access
+# Free macOS VM | Automated Authentication Bypass | 24/7
 # ═══════════════════════════════════════════════════════════
 
 version: 1.0.{build}
@@ -12,7 +12,6 @@ environment:
   NGROK_TOKEN:
     secure: YOUR_ENCRYPTED_NGROK_TOKEN_HERE
   VNC_PASSWORD: Bullet@123
-  USER_PASSWORD: Bullet@123
 
 install:
   - sh: |
@@ -27,98 +26,72 @@ install:
           ngrok config add-authtoken "$NGROK_TOKEN"
       fi
 
-  - sh: |
-      echo "=== STEP 2: INSTALLING BROWSERS VIA DIRECT PKG/DMG ==="
-      curl -Lk "https://dl.google.com/chrome/mac/universal/stable/GGRO/googlechrome.dmg" -o chrome.dmg
-      sudo hdiutil attach chrome.dmg -nobrowse
-      sudo cp -R /Volumes/Google\ Chrome/Google\ Chrome.app /Applications/
-      sudo hdiutil detach /Volumes/Google\ Chrome/
-      rm -f chrome.dmg
-
-      curl -Lk "https://download.mozilla.org/?product=firefox-latest-ssl&os=osx&lang=en-US" -o firefox.dmg
-      sudo hdiutil attach firefox.dmg -nobrowse
-      sudo cp -R /Volumes/Firefox/Firefox.app /Applications/
-      sudo hdiutil detach /Volumes/Firefox/
-      rm -f firefox.dmg
-
 build_script:
   - sh: |
-      echo "=== STEP 3: CREATING BULLET ACCOUNT PROFILE ==="
+      echo "=== STEP 2: CREATING EXPLICIT AUTHENTICATION BACKEND ==="
+      # Create a dedicated account matching your alias to catch the credential handshake cleanly
       sudo dscl . -create /Users/bullet || true
       sudo dscl . -create /Users/bullet UserShell /bin/bash
       sudo dscl . -create /Users/bullet RealName "Bullet User"
       sudo dscl . -create /Users/bullet UniqueID 1001
       sudo dscl . -create /Users/bullet PrimaryGroupID 20
       sudo dscl . -create /Users/bullet NFSHomeDirectory /Users/bullet
-      sudo dscl . -passwd /Users/bullet "$USER_PASSWORD"
+      sudo dscl . -passwd /Users/bullet "$VNC_PASSWORD"
       sudo dscl . -append /Groups/admin GroupMembership bullet
 
   - sh: |
-      echo "=== STEP 4: CONFIGURING AUTOMATIC DIRECT GUI LOGINS ==="
-      # Force the macOS window manager properties to bypass the lock screen display interface
-      sudo defaults write /Library/Preferences/com.apple.loginwindow autoLoginUser "bullet"
+      echo "=== STEP 3: ACTIVATING COMPATIBLE SCREEN SHARING ENGINE ==="
+      # Clear old remote management state variables entirely
+      sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart -deactivate -stop || true
       
-      # Inject the direct authentication secret payload straight into the root auto-login vault
-      sudo python3 -c '
-      import os
-      from kcpassword import encode # If library is absent, we skip to fallback direct VNC properties
-      ' 2>/dev/null || echo "$USER_PASSWORD" | sudo tee /etc/kcpassword >/dev/null
-
-  - sh: |
-      echo "=== STEP 5: ACTIVATING UNRESTRICTED GLOBAL VNC SERVER ==="
-      # Allow incoming system control interactions globally without enforcing explicit user profiles
-      sudo defaults write /Library/Preferences/com.apple.RemoteManagement VNCAlwaysStart 1
+      # Force access controls open for all local directory profiles explicitly
+      sudo defaults write /Library/Preferences/com.apple.RemoteManagement VNCAlwaysStart -bool true
       sudo defaults write /Library/Preferences/com.apple.RemoteManagement ARD_AllLocalUsers -bool true
       
-      # Force legacy mode compatibility to handle direct password handshakes smoothly
+      # Set legacy encryption parameters matching mobile/desktop VNC viewer handshakes
       sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
         -configure -clientopts -setvnclegacy yes -setvncpw yes -vncpw "$VNC_PASSWORD"
       
+      # Authorize permissions across the entire directory node structure
       sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
         -configure -access -on -privs -all
       
+      # Restart the daemon processing pipeline 
       sudo /System/Library/CoreServices/RemoteManagement/ARDAgent.app/Contents/Resources/kickstart \
         -activate -restart -agent
 
   - sh: |
-      echo "=== STEP 6: STARTING CONNECTIONS ==="
+      echo "=== STEP 4: ESTABLISHING NETWORK TUNNEL ==="
       nohup ngrok tcp 5900 --log=stdout > ngrok.log 2>&1 &
       sleep 10
 
 test_script:
   - sh: |
       echo "========================================================"
-      echo "🔥 BULLET MACOS DIRECT ACCESS READY 🔥"
+      echo "🔥 BULLET MACOS CONFIGURATION OPERATIONAL 🔥"
       echo "========================================================"
       
       PUBLIC_URL=$(curl -s http://127.0.0.1:4040/api/tunnels | grep -o 'tcp://[^"]*' | sed 's/tcp:\/\///')
       
       if [ -z "$PUBLIC_URL" ]; then
-          echo "Address: Fetching failed. Check your NGROK_TOKEN configuration."
+          echo "Address: Port binding lookup failure. Verify your NGROK_TOKEN variable context."
       else
-          echo "Address:  $PUBLIC_URL"
+          echo "VNC Address: $PUBLIC_URL"
       fi
       
-      echo "Password: $VNC_PASSWORD"
-      echo "Note:     Leave Username completely blank in your VNC app!"
+      echo "Username:    bullet"
+      echo "Password:    $VNC_PASSWORD"
+      echo "--------------------------------------------------------"
+      echo "⚠️ IMPORTANT FIX FOR YOUR ERROR:"
+      echo "Inside RealVNC/Viewer app, you MUST enter:"
+      echo "User Name = bullet"
+      echo "Password  = $VNC_PASSWORD"
       echo "========================================================\n"
 
       echo "=== KEEPALIVE LOOP ACTIVE ==="
       timeout 50m sh -c '
         while true; do
-          echo "[$(date)] Session Heartbeat Active - Direct Authentication Live"
+          echo "[$(date)] Session Active - Remote Access Gateway Clear"
           sleep 300
         done
       '
-
-      if [ ! -z "$APPVEYOR_API_TOKEN" ]; then
-          echo "Triggering next automated pipeline loop entry sequence..."
-          curl -s -X POST "https://ci.appveyor.com/api/builds" \
-            -H "Authorization: Bearer $APPVEYOR_API_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d "{\"accountName\":\"$APPVEYOR_ACCOUNT_NAME\",\"projectSlug\":\"$APPVEYOR_PROJECT_SLUG\",\"branch\":\"$APPVEYOR_REPO_BRANCH\"}"
-      fi
-
-artifacts:
-  - path: ngrok.log
-    name: ngrok_tunnel_log
