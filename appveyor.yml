@@ -1,48 +1,78 @@
 version: 1.0.{build}
 
-# Enforces execution on a macOS cloud runner
-image: macOS
+# Configures the build pipeline to deploy on a high-performance Ubuntu host
+image: Ubuntu2204
 
 build: off
 
 init:
   - sh: |
-      echo "Step 1: Downloading & Installing Essentials..."
-      # Install AnyDesk using Homebrew's cask system cleanly via command line
-      brew install --cask anydesk --quiet
+      echo "=== STEP 1: INSTALLING DEPENDENCIES ==="
+      # Silently provision the host runner with virtualization architectures and extraction packages
+      sudo apt-get update -qq > /dev/null 2>&1
+      sudo apt-get install -y -qq qemu-system-x86 ovmf wget curl unzip p7zip-full tar jq > /dev/null 2>&1
 
   - sh: |
-      echo "Step 2: Configuring unattended remote access..."
-      # Set up the permanent connection security password directly into the background service
-      echo "Bul2026!" | sudo /Applications/AnyDesk.app/Contents/MacOS/AnyDesk --set-password
+      echo "=== STEP 2: PROVISIONING RECOVERY LAYERS ==="
+      # Create working node directory and fetch optimized macOS kernel launching parameters
+      sudo mkdir -p /mnt/macOS-Simple-KVM
+      sudo chmod 777 /mnt/macOS-Simple-KVM
+      cd /mnt/macOS-Simple-KVM
+      
+      # Pull down setup definitions to build the virtual disk allocations cleanly
+      sudo wget -q -O basic.sh https://gitlab.com/MR.English2008/Mega_Gen/-/raw/main/basic.sh
+      sudo chmod +x basic.sh
 
-      echo "Starting AnyDesk background system daemon..."
-      sudo /Applications/AnyDesk.app/Contents/MacOS/AnyDesk --service &
-      sleep 15
+  - sh: |
+      echo "=== STEP 3: DOWNLOADING CONNECTIONS ==="
+      # Pull down the stable ngrok tunnel engine binary directly to hook the graphics listener
+      wget -q -O ngrok.zip https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.zip > /dev/null 2>&1
+      unzip -q ngrok.zip > /dev/null 2>&1
+      sudo mv ngrok /usr/local/bin/ > /dev/null 2>&1
+      rm -f ngrok.zip
+      
+      if [ ! -z "$NGROK_AUTHTOKEN" ]; then
+          ngrok config add-authtoken "$NGROK_AUTHTOKEN"
+      else
+          echo "Warning: NGROK_AUTHTOKEN environment variable is not defined."
+      fi
 
 test_script:
   - sh: |
-      echo "Step 3: Connecting to AnyDesk and fetching access keys..."
-      # Pull the system-assigned ID key from the application layer configuration
-      ANYDESK_ID=$(sudo /Applications/AnyDesk.app/Contents/MacOS/AnyDesk --get-id 2>/dev/null)
+      echo "=== STEP 4: LAUNCHING MACOS VIRTUAL CONTAINER ==="
+      cd /mnt/macOS-Simple-KVM
+      # Boot up the QEMU machine layer silently into a background execution context
+      nohup sudo ./basic.sh >/dev/null 2>&1 &
+      sleep 10
+
+  - sh: |
+      echo "=== STEP 5: ESTABLISHING REVERSE NETWORK TUNNEL ==="
+      # Expose the hypervisor graphics listener frame engine directly to standard port 5900
+      nohup ngrok tcp 5900 --region=eu > ngrok_log.log 2>&1 &
+      sleep 12
+
+      # Extract the dynamic server endpoint details directly from the ngrok background listener API
+      TUNNEL_URL=$(curl --silent http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[] | select(.config.addr=="localhost:5900") | .public_url' 2>/dev/null)
       
-      if [ -z "$ANYDESK_ID" ] || [ "$ANYDESK_ID" == "0" ]; then
-          echo "Retrying ID generation pass..."
-          sleep 15
-          ANYDESK_ID=$(sudo /Applications/AnyDesk.app/Contents/MacOS/AnyDesk --get-id 2>/dev/null)
+      if [ -z "$TUNNEL_URL" ] || [ "$TUNNEL_URL" = "null" ]; then
+          # Fallback lookup filter if local routing resolves differently on the runner interface
+          TUNNEL_URL=$(curl --silent http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url' 2>/dev/null)
       fi
 
-      echo -e "\n=========================================="
-      echo "======= APPVEYOR ANYDESK ACCESS ========"
-      echo " AnyDesk ID: $ANYDESK_ID"
-      echo " Password:   Bul2026!"
-      echo "==========================================\n"
+      CLEAN_ADDRESS=$(echo $TUNNEL_URL | sed 's/tcp:\/\///')
 
-      echo "Step 4: Launching Session Keep-Alive Time Counter Loop..."
-      # Keep the active cloud container runtime open for 50 minutes
+      echo -e "\n========================================================"
+      echo "======= SUCCESS: KVM MACOS VNC CONNECTION OPEN ========"
+      echo " Address:  $CLEAN_ADDRESS"
+      echo " Password: Bul2026!"
+      echo " Note:     Connect using a standard, basic VNC client app."
+      echo "========================================================\n"
+
+      echo "=== STEP 6: KEEPALIVE LOOPING COUNTER ACTIVE ==="
+      # Keep the active cloud hypervisor session context fully open for 50 minutes
       timeout 50m sh -c '
         while true; do
-          echo "[$(date)] AnyDesk Connection Session Engine Active"
+          echo "[$(date)] Hypervisor macOS Core Engine Operational"
           sleep 300
         done
       '
